@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>My first three.js app</title>
+		<style>
+			body { margin: 0; }
+			canvas { display: block; }
+			.ui{
+				position:fixed;
+				z-index:10;
+				display:flex;
+				flex-direction: column;
+				top:12px;
+				right:20px;
+			}
+
+			.ui .btn{
+				   margin: 10px;
+				background-color: cadetblue;
+				padding: 12px;
+				font-size: 12px;
+				color: white;
+				cursor: pointer;
+			}
+		</style>
+
+		<link rel="stylesheet" type="text/css" href="style.css">
+	</head>
+	<body>
+		<div id="ocean" class="ocean"></div>
+		<div id="overlay" class="overlay">
+		  <div id="holder" class="holder">
+			<div id="settings">settings:</div>
+
+			<div id="parameter">scene rotation speed</div>
+			<input type="range" min="1" max="100" value="1" class="slider" id="speed">
+
+			<div id="parameter">tires size</div>
+			<input type="range" min="1" max="100" value="1" class="slider" id="tsize">
+
+			<div id="parameter">jellyfish size</div>
+			<input type="range" min="1" max="100" value="1" class="slider" id="jsize">
+
+			<button type="button" id="button">resume</button>
+		  </div>
+		</div>
+
+
+		<script src="js/three.js"></script>
+		<script src="js/OrbitControls.js"></script>
+        <script src="js/tween.umd.js"></script>
+        <script src="js/OBJLoader.js"></script>
+        
+        <script src="obj.js"></script>
+
+		<script>
+			// Our Javascript will go here.
+
+			let mousePos= {x:0, y:0};
+            HEIGHT = window.innerHeight,
+            WIDTH = window.innerWidth,
+            flag=true;
+
+            const   Pi = Math.PI,    
+            scene = new THREE.Scene(),
+            
+            camera = new THREE.PerspectiveCamera(60, WIDTH/HEIGHT, 1, 10000),
+            renderer = new THREE.WebGLRenderer({alpha: true, antialias: true}),
+            container = document.getElementById('ocean'),  
+            ambientLight = new THREE.AmbientLight(0x045c7c, .5),
+            hemisphereLight = new THREE.HemisphereLight(0xaaaaaa,0x000000, .9),
+            shadowLight = new THREE.DirectionalLight(0xffffff, .9);
+
+            let controls = null;
+
+            const shapes = { //all the variables behind the objects in the scene
+    seabed : {
+        radius: 660,
+        height: 700,
+        rSeg:50,
+        hSeg:20,
+        ampR: 20,
+        speedC: .015,
+        color: 0x531e1e,
+        rotation: .005,
+        x: 0,
+        y: -620,
+        z: -50,
+        step: .000005, 
+    },
+    bottle : {
+        colors : ["orange", "blue","white", "red", "green", "blue",],
+        height: 20,
+        radius: 5,
+        segments: 16,
+        x: 0,
+        y: 150,
+        z: 110,
+        scale: 1,
+    },
+    can : {
+        colors : ["green", "orange", "black", "red", "brown", "blue",],
+        radius:5,
+        height: 20,
+        segments: 16,
+    },
+    fish : {
+        radius : 4,
+        height : 15,
+        segments : 12,
+
+    },
+    water : {
+        // groupNumber : 22,
+        // membersNumber : 20,
+        groupNumber : 6,
+        membersNumber : 5,
+        depth: 240,
+        step: .0015,
+    },
+    tire : {
+        innerR : 8,
+        outerR : 16,
+        rSegments : 8,
+        tSegments : 20,
+        number: 25,
+        step: .003,
+    },
+    tentacle : {
+        partsNum: 20,
+        partsOffset: 30,
+        firstOff: 10,
+    },
+    jellyfish : {
+        y : 100,
+        z : 110,
+        minX: -350,
+        maxX: 350,
+        minY: 70,
+        maxY: 450,
+    }
+};
+const settings={
+    camera: {
+        x:0,
+        y:350,
+        z:600,
+        xRot: -Pi/32,
+    },
+    oNpause: false,
+},
+    params = {
+        jsize:1,
+        speed:1,
+        tsize:1,
+};
+
+
+    let water,
+        trash, 
+        trashHolder, 
+        waterfish,
+        tentacles = [],
+        jellyDisplacementX = 0, 
+        jellyDisplacementY = 0, 
+        crashSpeedX = 0, 
+        crashSpeedY = 0,
+        jellyDisplacementX2 = 0, 
+        jellyDisplacementY2 = 0, 
+        crashSpeedX2 = 0, 
+        crashSpeedY2 = 0,
+        crash,
+        crash2,
+        countTentacles=0;
+
+        var bombEnd = false
+
+    function initScene() { //scene initialisation
+        scene.fog = new THREE.Fog(0x38bbb7, -200,950);
+        camera.position.set(settings.camera.x,settings.camera.y,settings.camera.z);
+        camera.rotation.x=settings.camera.xRot;
+
+        
+
+        renderer.setSize(WIDTH, HEIGHT);
+        renderer.shadowMap.enabled = true;
+        container.appendChild(renderer.domElement);
+
+        // controls = new THREE.OrbitControls( camera, renderer.domElement );
+
+
+        window.addEventListener('resize', handleWindowResize, false);
+    }
+
+   
+
+    function handleMouseMove(event) {
+        const tx = -1 + (event.clientX / WIDTH)*2;
+        const ty = 1 - (event.clientY / HEIGHT)*2;
+        mousePos = {x:tx, y:ty};
+    }
+
+    function handleWindowResize() {
+        HEIGHT = window.innerHeight;
+        WIDTH = window.innerWidth;
+        renderer.setSize(WIDTH, HEIGHT);
+        camera.aspect = WIDTH / HEIGHT;
+        camera.updateProjectionMatrix();
+    }
+
+    function initLights() {
+        scene.add(hemisphereLight);
+        scene.add(shadowLight);
+        scene.add(ambientLight);
+    }
+
+    
+    const seabed = new Seabed(shapes.seabed.radius, shapes.seabed.height,
+                            shapes.seabed.rSeg, shapes.seabed.hSeg,
+                            shapes.seabed.ampR, shapes.seabed.speedC, shapes.seabed.color,
+                            shapes.seabed.x, shapes.seabed.y, shapes.seabed.z);
+    scene.add(seabed.mesh);
+
+
+    function loadObj(){
+        // instantiate a loader
+        var loader = new THREE.OBJLoader();
+        // load a resource
+        loader.load(
+            // resource URL
+            'models/fish.obj',
+            // called when resource is loaded
+            function ( object ) {
+                waterfish = object
+                waterfish.scale.set(0.01,0.01,0.01)
+                waterfish.position.set(0,50,110)
+                waterfish.rotation.set(0,Math.PI,0)
+
+                scene.add( object );
+            },
+            // called when loading is in progresses
+            function ( xhr ) {
+                console.log( ( xhr.loaded / xhr.total * 100 ) + '% loaded' );
+            },
+            // called when loading has errors
+            function ( error ) {
+                console.log( 'An error happened' );
+            }
+        );
+    }
+
+    function bombGarbage(){
+        let toBomb=[]
+        let fromBomb=[]
+        const step = Pi*2 / 500;
+        const d = 200;
+
+        for(let i=0;i<water.elements.length;i++){
+            // const angle = i*step;
+            // const offset = (Math.PI/16)*(Math.random()*0.4 + 0.8);
+
+            const depth = shapes.seabed.height + Math.random()*d*1.2;
+
+            // const tx = Math.cos(water.elements[i].angle + water.elements[i].offset)*(water.elements[i].distance);
+            // const ty = Math.sin(water.elements[i].angle + water.elements[i].offset)*(water.elements[i].distance);
+            const ty = water.elements[i].offset - shapes.seabed.height + Math.sin(water.elements[i].angle)*water.elements[i].distance;
+            const tx = Math.cos(water.elements[i].angle)*water.elements[i].distance;
+
+            const tz =110;
+
+            const tp = {x:tx,y:ty,z:tz};
+            const fp = {x:water.mesh.children[i].position.x, y:water.mesh.children[i].position.y,z:water.mesh.children[i].position.z};
+
+            toBomb.push(tp)
+            fromBomb.push(fp)
+        }
+
+
+        //TWEEN.removeAll(); 
+
+        let coords={x: 0, y: 200,z:0}
+        const tween = new TWEEN.Tween(coords) // Create a new tween that modifies 'coords'.
+        .to({ x: 0, y: -450,z:0 }, 2000) // Move to (300, 200) in 1 second.
+        .easing(TWEEN.Easing.Quadratic.Out) // Use an easing function to make the animation smooth.
+        .onUpdate((e,t) => { // Called after tween.js updates 'coords'.
+            for(let i = 0;i<water.mesh.children.length;i++){
+                water.mesh.children[i].position.x = fromBomb[i].x * (1-t) + toBomb[i].x * t
+                water.mesh.children[i].position.y = fromBomb[i].y * (1-t) + toBomb[i].y * t
+                water.mesh.children[i].position.z = fromBomb[i].z * (1-t) + toBomb[i].z * t
+            }
+
+            // water.mesh.position.y = coords.y
+        })
+        .onComplete(()=>{
+            bombEnd = true
+        })
+        .start(); // Start the tween immediately.
+    }
+
+    function moveTo(obj,from,to){
+        let coords={x: from.x, y: from.y,z:from.z}
+        const tween = new TWEEN.Tween(coords,) // Create a new tween that modifies 'coords'.
+        .to({ x: to.x, y: to.y,z:to.z }, 3000) // Move to (300, 200) in 1 second.
+        .easing(TWEEN.Easing.Quadratic.Out) // Use an easing function to make the animation smooth.
+        .onUpdate((e,t) => { // Called after tween.js updates 'coords'.
+            obj.position.x = coords.x
+            obj.position.y = coords.y
+            obj.position.z = coords.z
+        })
+        .delay(1000)
+        .onComplete(()=>{
+           obj.position.y = 0
+           bombGarbage()
+        })
+        .start(); // Start the tween immediately.
+    }
+
+    function createWater(){
+        bombEnd = false
+        water = new Water();
+        water.spawnTrash(shapes.seabed.height,110,shapes.tire.number);
+        scene.add(water.mesh)
+
+        const from = {x:0,y:700,z:110}
+        const to = {x:0,y:200,z:110}
+
+        moveTo(water.mesh,from,to)
+    }
+
+
+
+    function reCreateWater(){
+
+        bombEnd = false
+
+        for(let w of water.mesh.children){
+            water.mesh.remove(w)
+        }
+        water.elements = []
+        scene.remove(water.mesh);
+
+        water = new Water();
+        water.spawnTrash(shapes.seabed.height,110,shapes.tire.number);
+        scene.add(water.mesh)
+
+        // shapes.water.groupNumber = shapes.water.groupNumber*1.8
+        // shapes.water.membersNumber = shapes.water.membersNumber*1.8
+        
+        // water = new Water(shapes.water.groupNumber, shapes.water.membersNumber,shapes.water.depth);
+        const from = {x:0,y:700,z:110}
+        const to = {x:0,y:200,z:110}
+        scene.add(water.mesh);
+        moveTo(water.mesh,from,to)
+
+    }
+
+    function onKeyUp(e){
+        if(e.key=='a'){
+            reCreateWater()
+        }
+				
+	}
+
+
+    document.addEventListener("keyup", onKeyUp);
+
+
+    function createTrash(){
+        trashHolder = new TrashHolder();
+        trashHolder.spawnTrash(shapes.seabed.height,110,shapes.tire.number);
+        scene.add(trashHolder.mesh)
+    }
+
+
+    function updateWaterFish(scale,minX,maxX,minY,maxY){
+        //with this we make the  move around the screen
+        waterfish.rotation.x+=.005;
+        let targetX = normalize(mousePos.x, -1, 1, minX, maxX);
+        let targetY = normalize(mousePos.y, -1, 1, minY, maxY);
+    
+        jellyDisplacementX+= crashSpeedX;
+        targetX+=jellyDisplacementX;
+
+        jellyDisplacementX2+= crashSpeedX2;
+        targetX+=jellyDisplacementX2;
+
+
+        jellyDisplacementY+= crashSpeedY;
+        targetY+=jellyDisplacementY;
+
+        jellyDisplacementY2+= crashSpeedY2;
+        targetY+=jellyDisplacementY2;
+
+        waterfish.position.y+= (targetY - waterfish.position.y)*0.02;
+        waterfish.position.x+= (targetX - waterfish.position.x)*0.03;
+        waterfish.rotation.z = (targetY-waterfish.position.y)*0.0050;
+        waterfish.rotation.x = (waterfish.position.x-targetX)*0.0025;
+
+        crashSpeedX+= -1*crashSpeedX*0.07;
+        crashSpeedY+= -1*crashSpeedY*0.07;
+        jellyDisplacementX+= -1*jellyDisplacementX*0.3;
+        jellyDisplacementY+= -1*jellyDisplacementY*0.3;
+
+        crashSpeedX2+= -1*crashSpeedX2*0.07;
+        crashSpeedY2+= -1*crashSpeedY2*0.07;
+        jellyDisplacementX2+= -1*jellyDisplacementX2*0.3;
+        jellyDisplacementY2+= -1*jellyDisplacementY2*0.3;
+        
+    }
+
+
+    function loop(){
+        
+        if(!settings.oNpause){
+            seabed.mesh.rotation.z += shapes.seabed.step*params.speed;
+             
+            seabed.moveBumps(shapes.seabed.rotation);
+            
+            if(waterfish){
+                trashHolder.rotateTrash(shapes.tire.step*params.speed,params.tsize);
+                trashHolder.hide();
+
+                
+
+                // water.mesh.rotation.z+= shapes.water.step*params.speed;
+
+                if(bombEnd){
+
+                    water.rotateTrash(shapes.tire.step*params.speed,params.tsize);
+                    water.hide();
+                }
+
+               
+
+                updateWaterFish(params.jsize,shapes.jellyfish.minX,shapes.jellyfish.maxX,shapes.jellyfish.minY,shapes.jellyfish.maxY)
+            }
+        }
+        // else{
+        //     changeSliders();
+        // }
+
+        TWEEN.update();
+        
+        renderer.render(scene, camera);
+        requestAnimationFrame(loop);
+    }
+
+    function init(event){
+        document.addEventListener('mousemove', handleMouseMove, false);
+        initScene();
+         initLights();
+        loadObj();
+        createTrash();
+        createWater();
+        
+        loop();
+    }
+
+
+
+window.addEventListener('load', init, false);
+
+document.onkeydown = function(evt) {
+    evt = evt || window.event;
+    let isEscape = false;
+    if ("key" in evt) {
+        isEscape = (evt.key == "Escape" || evt.key == "Esc");
+    } else {
+        isEscape = (evt.keyCode == 27);
+    }
+    if (isEscape) {
+        const x = document.getElementById("overlay");
+        if(settings.oNpause){
+            x.style.display="none";
+        }
+        else{
+            x.style.display="block";
+        }
+        settings.oNpause=!settings.oNpause;
+    }
+};
+
+    function changeSliders(){
+        const sliderSpeed = document.getElementById("speed").value;
+        params.speed=sliderSpeed/160 + 1;
+        
+        const sliderJSize = document.getElementById("jsize").value;
+        params.jsize= sliderJSize/200 + 1;
+        
+        const sliderTSize = document.getElementById("tsize").value;
+        params.tsize= sliderTSize/150 + 1;
+    };
+
+    document.addEventListener('click', function (event) {
+        if(!flag){
+            clock.start();
+            flag=true;
+        }
+    }, false);
+
+    document.getElementById("button").addEventListener('click', function(){
+        settings.oNpause=!settings.oNpause;
+        document.getElementById("overlay").style.display="none";
+    },false);
+
+
+		</script>
+	</body>
+</html>
