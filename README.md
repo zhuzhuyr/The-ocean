@@ -14,3 +14,7 @@ Data Transfer: Taking the example of change data of water pollution in Nanjing o
 
 Ideal effect: As the levels change, the data values change, causing different levels of difficulty.
 
+
+<div align=center>
+<img src="https://github.com/zhuzhuyr/The-ocean/blob/master/pics%20and%20video/Screenshots.jpg" width="400px">
+</div>
